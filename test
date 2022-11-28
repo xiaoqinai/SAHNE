@@ -1,0 +1,119 @@
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Nov 25 10:34:07 2018
+
+@author: jiang
+"""
+
+embedding_W = tf.Variable(initial_value=node_fea, name='encoder_embed', trainable=False)
+
+input_seq_embed = tf.nn.embedding_lookup(embedding_W, node_seq[128:256], name='input_embed_lookup')
+input_seq_embed_lear = tf.layers.dense(input_seq_embed, units=hp.hidden_units, activation=None)
+
+enc = tf.layers.dropout(input_seq_embed_lear, 
+                            rate=hp.dropout_rate, 
+                            training=tf.convert_to_tensor(is_training))
+
+
+
+
+
+
+
+with tf.variable_scope("eencoder"):
+
+
+    for i in range(hp.num_blocks):
+        with tf.variable_scope("num_blocks_{}".format(i)):
+            ### Multihead Attention
+            enc = multihead_attention(queries=enc, 
+                                            keys=enc, 
+                                            num_units=hp.hidden_units, 
+                                            num_heads=hp.num_heads, 
+                                            dropout_rate=hp.dropout_rate,
+                                            is_training=is_training,
+                                            causality=False)
+            
+            ### Feed Forward
+            enc = feedforward(enc, num_units=[4*hp.hidden_units, hp.hidden_units])        
+
+
+
+with tf.variable_scope("ddecoder"):
+    ## Embedding
+    dec = embedding(node_seq[0:128], 
+                          vocab_size=node_num, 
+                          num_units=hp.hidden_units,
+                          scale=True, 
+                          scope="dec_embed")
+    
+    
+    dec = tf.layers.dropout(dec, 
+                                rate=hp.dropout_rate, 
+                                training=tf.convert_to_tensor(is_training))
+
+
+
+
+    for i in range(hp.num_blocks):
+        with tf.variable_scope("num_blocks_{}".format(i)):
+            ## Multihead Attention ( self-attention)
+            dec = multihead_attention(queries=dec, 
+                                            keys=dec, 
+                                            num_units=hp.hidden_units, 
+                                            num_heads=hp.num_heads, 
+                                            dropout_rate=hp.dropout_rate,
+                                            is_training=is_training,
+                                            causality=True, 
+                                            scope="self_attention")
+            
+            ## Multihead Attention ( vanilla attention)
+            dec = multihead_attention(queries=dec, 
+                                            keys=enc, 
+                                            num_units=hp.hidden_units, 
+                                            num_heads=hp.num_heads,
+                                            dropout_rate=hp.dropout_rate,
+                                            is_training=is_training, 
+                                            causality=False,
+                                            scope="vanilla_attention")
+            
+            ## Feed Forward
+            dec = feedforward(dec, num_units=[4*hp.hidden_units, hp.hidden_units])
+
+
+
+
+
+output_preds = tf.layers.dense(dec, units=node_num, activation=None)
+
+loss_ce = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=node_seq[128:256], logits=output_preds)######3#####
+loss_ce = tf.reduce_mean(loss_ce, name='loss_ce')
+
+global_step = tf.Variable(1, name="global_step", trainable=False)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+with tf.Session() as sess:
+    sess.run(tf.global_variables_initializer())
+#        print (sess.run(outputs))
+    aa=enc.eval()
+    bb=dec.eval()
+    cc=loss_ce.eval()
